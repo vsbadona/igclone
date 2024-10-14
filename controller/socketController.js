@@ -17,7 +17,7 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir);
 }
 
-export const notifyFollowers = async (userId, newPost, io) => {
+export const feedFollower = async (userId, newPost, io) => {
   const user = await User.findById(userId).populate('followers'); // Fetch followers
   const followers = user.followers.map(follower => follower._id.toString());
 
@@ -122,12 +122,14 @@ export const createConversation = async (socket, io, { username, userId }) => {
       await userInitiator.save();
       await userRecipient.save();
 
-      const populatedConversation = await conversation.populate('creator','participants', 'username image');
-
+      const populatedConversation = await conversation
+      .populate('creator', 'username image') // Populate creator with username and image
+      .populate('participants', 'username image'); // Populate participants with username and image
+    
       // Emit the new conversation to both users by their userId
       socket.emit('success', { message: "Success" });
       io.to(user._id.toString()).emit('newConversation', { conversation: populatedConversation });
-      io.to(userId).emit('newConversation', { conversation: populatedConversation });
+      { userId, targetUserId }
   } catch (error) {
       socket.emit('error', { message: error.message });
   }
@@ -138,7 +140,8 @@ export const getAllCon = async (socket, { userId }) => {
   try {
       const user = await User.findById(userId).populate({
           path: 'conversations',
-          populate: { path: 'participants', select: 'username image' }
+          populate:{path: 'creator', select: 'username image' },
+          populate: { path: 'participants', select: 'username image' },
       });
 
       const conversations = user.conversations.map(conversation => {
@@ -154,3 +157,126 @@ export const getAllCon = async (socket, { userId }) => {
       socket.emit('alert', { message: error.message });
   }
 };
+
+
+export const followUser = async ({ userId, targetUserId }, io) => {
+  try {
+      const user = await User.findById(userId);
+      const targetUser = await User.findById(targetUserId);
+
+      if (!user || !targetUser) {
+          return; // Optionally return an error response if needed
+      }
+
+      // Add targetUser to user's following
+      if (!user.following.includes(targetUserId)) {
+          user.following.push(targetUserId);
+          await user.save();
+          io.to(userId).emit('followed', user);  // Emit follow event to the follower
+
+
+          const notify = {
+            user: user._id,
+            action: 'followed',
+            content: `started following you.`,
+            time: Date.now(),
+            post: null, // No post associated with follow action
+            button: "Follow Back" // Customize this as needed
+        }
+
+        const populatedNotify = await User.populate(notify, {
+          path: 'user',
+          select: 'username image' // Adjust fields to include
+      });
+          // Add notification for the target user
+          targetUser.notifications.push(populatedNotify);
+          await targetUser.save(); // Save the target user with the new notification
+        }
+        
+        // Add user to targetUser's followers
+        if (!targetUser.followers.includes(userId)) {
+          targetUser.followers.push(userId);
+          await targetUser.save();
+          io.to(targetUserId).emit('newfollow', populatedNotify);  // Emit new follow event to the followed user
+      }
+
+  } catch (error) {
+      console.error(error.message); // Log the error for debugging
+  }
+};
+export const followBackUser = async ({ userId, targetUserId }, io) => {
+  try {
+      const user = await User.findById(userId);
+      const targetUser = await User.findById(targetUserId);
+
+      if (!user || !targetUser) {
+          return; // Optionally return an error response if needed
+      }
+
+      // Add targetUser to user's following
+      if (!user.following.includes(targetUserId)) {
+          user.following.push(targetUserId);
+          await user.save();
+          io.to(userId).emit('followed', targetUser);  // Emit follow event to the follower
+
+
+          const notify = {
+            user: user._id,
+            action: 'followed',
+            content: `followed you back`,
+            time: Date.now(),
+            post: null, // No post associated with follow action
+            button: null // Customize this as needed
+        }
+
+        const populatedNotify = await User.populate(notify, {
+          path: 'user',
+          select: 'username image' // Adjust fields to include
+      });
+          // Add notification for the target user
+          targetUser.notifications.push(populatedNotify);
+          await targetUser.save(); // Save the target user with the new notification
+        }
+        
+        // Add user to targetUser's followers
+        if (!targetUser.followers.includes(userId)) {
+          targetUser.followers.push(userId);
+          await targetUser.save();
+          io.to(targetUserId).emit('newfollow', populatedNotify);  // Emit new follow event to the followed user
+      }
+
+  } catch (error) {
+      console.error(error.message); // Log the error for debugging
+  }
+};
+
+
+export const unfollowUser = async ({ userId, targetUserId }, io) => {
+  try {
+      const user = await User.findById(userId);
+      const targetUser = await User.findById(targetUserId);
+
+      if (!user || !targetUser) {
+          return; // Optionally handle the error response
+      }
+
+      // Remove targetUser from user's following
+      user.following = user.following.filter(id => !id.equals(targetUserId));
+      await user.save();
+      io.to(userId).emit('unFollow', user);  // Emit unfollow event
+
+      // Remove user from targetUser's followers
+      targetUser.followers = targetUser.followers.filter(id => !id.equals(userId));
+      await targetUser.save();
+
+
+      // Add notification for the target user
+      await targetUser.save(); // Save the target user with the new notification
+
+      io.to(targetUserId).emit('unfollow', targetUser);  // Emit new unfollow event to the unfollowed user
+
+  } catch (error) {
+      console.error(error.message); // Log the error for debugging
+  }
+};
+

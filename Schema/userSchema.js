@@ -25,6 +25,17 @@ const userSchema = new mongoose.Schema({
     phone: { type: Number, required: true },
     password: { type: String, required: true },
     posts: [postSchema],
+    notifications:[{
+        // user, action, content, time, image, postImage, button
+        time:{ type: Date, default: Date.now },
+        user:{
+            type:mongoose.Schema.Types.ObjectId, ref: 'User' 
+        },
+        action:String,
+        content:String,
+        post: { type: postSchema },
+        button:String
+    }],
     followers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     following: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     feeds: [{

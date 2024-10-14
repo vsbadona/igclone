@@ -1,7 +1,7 @@
 // socket.js
 import { Server } from "socket.io";
 import User from './Schema/userSchema.js'; // Adjust the import according to your structure
-import { createConversation, createPost, getAllCon } from "./controller/socketController.js";
+import { createConversation, createPost, followBackUser, followUser, getAllCon, unfollowUser } from "./controller/socketController.js";
 
 export const initializeSocket = (server) => {
   const io = new Server(server, {
@@ -55,6 +55,11 @@ export const initializeSocket = (server) => {
   socket.on('stop typing', (data) => {
       socket.to(data.room).emit('stop typing', data);
   });
+
+  socket.on('follow',(data) => followUser(data,io));
+  socket.on('followback',(data) => followBackUser(data,io));
+  socket.on('unfollow',(data) => unfollowUser(data,io));
+
 
     socket.on("disconnect", () => {
       console.log(`User with socket ID: ${socket.id} has disconnected`);

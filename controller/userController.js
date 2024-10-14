@@ -396,3 +396,25 @@ export const getFeeds = async (req, res) => {
         res.json({ alert: "An error occurred while fetching feeds." });
     }
 };
+
+
+export const getNotify = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const user = await User.findById(id)
+            .populate({
+                path: 'notifications.user',
+                select: 'username image' // Specify fields to include
+            });
+
+        if (!user) {
+            return res.json({ alert: "User not found." });
+        }
+
+        const notify = user.notifications;
+        res.json({ success: notify });
+    } catch (error) {
+        console.error(error);
+        res.json({ alert: "An error occurred while fetching notifications." });
+    }
+};
