@@ -4,6 +4,7 @@ import path from 'path';
 import mongoose from 'mongoose';
 import User from '../Schema/userSchema.js'; // Adjust the import according to your structure
 import { fileURLToPath } from 'url';
+import Conversation from '../Schema/conversationSchema.js';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -93,5 +94,63 @@ export const createPost = async (userId, { description, image }, io) => {
   } catch (error) {
     console.error(error);
     throw new Error("An error occurred while creating the post.");
+  }
+};
+
+
+
+export const createConversation = async (socket, io, { username, userId }) => {
+  try {
+      const user = await User.findOne({ username });
+      if (!user || user._id.toString() === userId) {
+          return socket.emit('alert', { message: "You can't create a conversation with yourself" });
+      }
+
+      const ifConExist = await Conversation.findOne({ participants: { $all: [user._id, userId] } });
+      if (ifConExist) {
+          return socket.emit('alert', { message: "Conversation exists" });
+      }
+
+      const conversation = new Conversation({ participants: [user._id, userId],creator:[user._id] });
+      await conversation.save();
+
+      const userInitiator = await User.findById(user._id);
+      const userRecipient = await User.findById(userId);
+
+      userInitiator.conversations.push(conversation._id);
+      userRecipient.conversations.push(conversation._id);
+      await userInitiator.save();
+      await userRecipient.save();
+
+      const populatedConversation = await conversation.populate('creator','participants', 'username image');
+
+      // Emit the new conversation to both users by their userId
+      socket.emit('success', { message: "Success" });
+      io.to(user._id.toString()).emit('newConversation', { conversation: populatedConversation });
+      io.to(userId).emit('newConversation', { conversation: populatedConversation });
+  } catch (error) {
+      socket.emit('error', { message: error.message });
+  }
+};
+
+// Get all conversations for a user
+export const getAllCon = async (socket, { userId }) => {
+  try {
+      const user = await User.findById(userId).populate({
+          path: 'conversations',
+          populate: { path: 'participants', select: 'username image' }
+      });
+
+      const conversations = user.conversations.map(conversation => {
+          const filteredParticipants = conversation.participants.filter(participant => participant._id.toString() !== userId);
+          return {
+              ...conversation.toObject(),
+              participants: filteredParticipants
+          };
+      });
+
+      socket.emit('getAllCon', { conversations });
+  } catch (error) {
+      socket.emit('alert', { message: error.message });
   }
 };

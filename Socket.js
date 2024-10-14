@@ -1,7 +1,7 @@
 // socket.js
 import { Server } from "socket.io";
 import User from './Schema/userSchema.js'; // Adjust the import according to your structure
-import { createPost } from "./controller/socketController.js";
+import { createConversation, createPost, getAllCon } from "./controller/socketController.js";
 
 export const initializeSocket = (server) => {
   const io = new Server(server, {
@@ -32,6 +32,29 @@ export const initializeSocket = (server) => {
         socket.emit('postError', { message: error.message });
       }
     });
+  
+    socket.on('searchUser',async({prompt}) =>{
+      const users = await User.find({ username: new RegExp(prompt, 'i') });
+      io.emit('searched', users);
+    })
+
+    socket.on('createcon', (data) => createConversation(socket, io, data));
+
+    // Event for getting all conversations
+    socket.on('getAllCon', (data) => getAllCon(socket, data));
+
+    
+    socket.on('chat message', (msg) => {
+      io.to(msg.room).emit('chat message', msg); // Send message to the specific room
+  });
+
+  socket.on('typing', (data) => {
+      socket.to(data.room).emit('typing', data);
+  });
+
+  socket.on('stop typing', (data) => {
+      socket.to(data.room).emit('stop typing', data);
+  });
 
     socket.on("disconnect", () => {
       console.log(`User with socket ID: ${socket.id} has disconnected`);

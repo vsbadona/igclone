@@ -35,7 +35,9 @@ const userSchema = new mongoose.Schema({
             image: String
         },
         createdAt: { type: Date, default: Date.now }
-    }]
+    }],
+    conversations: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Conversation' ,user:{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }}]
+
 });
 
 const User = mongoose.model("User", userSchema);

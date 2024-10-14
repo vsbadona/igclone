@@ -92,6 +92,7 @@ export const loginUser = async (req, res) => {
 
 
 export const updateProfile = async (req, res) => {
+    const {name} = req.body
     let image = ''
 
     if(req.file){
@@ -107,7 +108,7 @@ export const updateProfile = async (req, res) => {
         const userId = req.body._id; // Adjust this according to your auth setup
 
         // Update the user in the database
-        const updatedUser = await User.findByIdAndUpdate(userId,{image:image}, { new: true, runValidators: true }) .populate('posts.likes.user', 'username image')
+        const updatedUser = await User.findByIdAndUpdate(userId,{image:image,name:name}, { new: true, runValidators: true }) .populate('posts.likes.user', 'username image')
         .populate('posts.comments.user', 'username image')
         .populate('following', 'username image')
         .populate('followers', 'username image')
