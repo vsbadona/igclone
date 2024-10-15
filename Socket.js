@@ -1,7 +1,7 @@
 // socket.js
 import { Server } from "socket.io";
 import User from './Schema/userSchema.js'; // Adjust the import according to your structure
-import { createConversation, createPost, followBackUser, followUser, getAllCon, unfollowUser } from "./controller/socketController.js";
+import {  createConversation, createPost,getAllCon, getfeeds, getUserPost, likepost } from "./controller/socketController.js";
 
 export const initializeSocket = (server) => {
   const io = new Server(server, {
@@ -26,12 +26,18 @@ export const initializeSocket = (server) => {
     socket.on('uploadPost', async (data) => {
       const { userId, description, image } = data;
       try {
-        await createPost(userId, { description, image }, io);
+        await createPost(socket,userId, { description, image }, io);
         socket.emit('postCreated', { message: 'Post created successfully' });
       } catch (error) {
         socket.emit('postError', { message: error.message });
       }
     });
+
+    socket.on('getfeeds',async()=>getfeeds(socket,io))
+    socket.on('getposts',async(data) => getUserPost(socket,data,io));
+
+    socket.on('likepost',async(data)=>likepost(socket,data,io))
+
   
     socket.on('searchUser',async({prompt}) =>{
       const users = await User.find({ username: new RegExp(prompt, 'i') });
@@ -55,11 +61,6 @@ export const initializeSocket = (server) => {
   socket.on('stop typing', (data) => {
       socket.to(data.room).emit('stop typing', data);
   });
-
-  socket.on('follow',(data) => followUser(data,io));
-  socket.on('followback',(data) => followBackUser(data,io));
-  socket.on('unfollow',(data) => unfollowUser(data,io));
-
 
     socket.on("disconnect", () => {
       console.log(`User with socket ID: ${socket.id} has disconnected`);

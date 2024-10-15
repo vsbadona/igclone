@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import User from '../Schema/userSchema.js'; // Adjust the import according to your structure
 import { fileURLToPath } from 'url';
 import Conversation from '../Schema/conversationSchema.js';
+import Post from '../Schema/postSchema.js';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -17,85 +18,7 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir);
 }
 
-export const feedFollower = async (userId, newPost, io) => {
-  const user = await User.findById(userId).populate('followers'); // Fetch followers
-  const followers = user.followers.map(follower => follower._id.toString());
 
-  const feedPost = {
-    postId: newPost.post._id, // Create a new unique ID
-      image: newPost.post.image, // Save the relative path to the image
-      description: newPost.post.description,
-      likes: [],
-      comments: [],
-      creator: user._id,
-      createdBy: {
-        userId: user._id,
-        username: user.username,
-        image: user.image,
-      },
-  }
-
-  followers.forEach(followerId => {
-    io.to(followerId).emit('newPost',feedPost);  // Emit new post to each follower's room
-  });
-};
-
-export const createPost = async (userId, { description, image }, io) => {
-  try {
-    const buffer = Buffer.from(new Uint8Array(image));
-
-    const fileName = `${new mongoose.Types.ObjectId()}.jpg`; // Change extension as needed
-    const filePath = path.join(uploadsDir, fileName); // Specify your uploads directory
-
-    // Save the image to the filesystem
-    fs.writeFileSync(filePath, buffer); // Handle errors in a production app
-    const user = await User.findById(userId);
-    if (!user) return;
-
-    // Create a new post object with an ID
-    const newPost = {
-      _id: new mongoose.Types.ObjectId(), // Create a new unique ID
-      image: `/uploads/${fileName}`, // Save the relative path to the image
-      description: description || "",
-      likes: [],
-      comments: [],
-      creator: user._id,
-      createdAt:Date.now()
-    };
-
-    // Add the new post to the user's posts array
-    user.posts.push(newPost);
-    await user.save();
-    io.to(userId).emit('profilePost',newPost);
-  
-    const feedEntry = {
-      post: newPost,
-      createdBy: {
-        userId: user._id,
-        username: user.username,
-        image: user.image,
-      },
-    };
-
-    // Prepare bulk operations for followers
-    const bulkOps = user.followers.map(followerId => ({
-      updateOne: {
-        filter: { _id: followerId },
-        update: { $push: { feeds: feedEntry } },
-      },
-    }));
-
-    // Execute bulk operations
-    if (bulkOps.length > 0) {
-      await User.bulkWrite(bulkOps);
-    }
-
-    await notifyFollowers(userId, feedEntry, io); // Notify followers
-  } catch (error) {
-    console.error(error);
-    throw new Error("An error occurred while creating the post.");
-  }
-};
 
 
 
@@ -159,124 +82,85 @@ export const getAllCon = async (socket, { userId }) => {
 };
 
 
-export const followUser = async ({ userId, targetUserId }, io) => {
+
+export const createPost = async (socket,userId, { description, image }, io) => {
   try {
-      const user = await User.findById(userId);
-      const targetUser = await User.findById(targetUserId);
+    const buffer = Buffer.from(new Uint8Array(image));
 
-      if (!user || !targetUser) {
-          return; // Optionally return an error response if needed
-      }
+    const fileName = `${new mongoose.Types.ObjectId()}.jpg`; // Change extension as needed
+    const filePath = path.join(uploadsDir, fileName); // Specify your uploads directory
 
-      // Add targetUser to user's following
-      if (!user.following.includes(targetUserId)) {
-          user.following.push(targetUserId);
-          await user.save();
-          io.to(userId).emit('followed', user);  // Emit follow event to the follower
+    // Save the image to the filesystem
+    fs.writeFileSync(filePath, buffer); // Handle errors in a production app
+    const user = await User.findById(userId);
+    if (!user) return;
 
+    // Create a new post object with an ID
+    const newPost = new Post({
+      _id: new mongoose.Types.ObjectId(), // Create a new unique ID
+      image: `/uploads/${fileName}`, // Save the relative path to the image
+      description: description || "",
+      likes: [],
+      comments: [],
+      createdAt:Date.now(),
+      user: user._id,
+    });
 
-          const notify = {
-            user: user._id,
-            action: 'followed',
-            content: `started following you.`,
-            time: Date.now(),
-            post: null, // No post associated with follow action
-            button: "Follow Back" // Customize this as needed
-        }
-
-        const populatedNotify = await User.populate(notify, {
-          path: 'user',
-          select: 'username image' // Adjust fields to include
-      });
-          // Add notification for the target user
-          targetUser.notifications.push(populatedNotify);
-          await targetUser.save(); // Save the target user with the new notification
-        }
-        
-        // Add user to targetUser's followers
-        if (!targetUser.followers.includes(userId)) {
-          targetUser.followers.push(userId);
-          await targetUser.save();
-          io.to(targetUserId).emit('newfollow', populatedNotify);  // Emit new follow event to the followed user
-      }
-
+    await newPost.save();
+    socket.emit('profilePost',newPost);
+  
+  
+   
   } catch (error) {
-      console.error(error.message); // Log the error for debugging
-  }
-};
-export const followBackUser = async ({ userId, targetUserId }, io) => {
-  try {
-      const user = await User.findById(userId);
-      const targetUser = await User.findById(targetUserId);
-
-      if (!user || !targetUser) {
-          return; // Optionally return an error response if needed
-      }
-
-      // Add targetUser to user's following
-      if (!user.following.includes(targetUserId)) {
-          user.following.push(targetUserId);
-          await user.save();
-          io.to(userId).emit('followed', targetUser);  // Emit follow event to the follower
-
-
-          const notify = {
-            user: user._id,
-            action: 'followed',
-            content: `followed you back`,
-            time: Date.now(),
-            post: null, // No post associated with follow action
-            button: null // Customize this as needed
-        }
-
-        const populatedNotify = await User.populate(notify, {
-          path: 'user',
-          select: 'username image' // Adjust fields to include
-      });
-          // Add notification for the target user
-          targetUser.notifications.push(populatedNotify);
-          await targetUser.save(); // Save the target user with the new notification
-        }
-        
-        // Add user to targetUser's followers
-        if (!targetUser.followers.includes(userId)) {
-          targetUser.followers.push(userId);
-          await targetUser.save();
-          io.to(targetUserId).emit('newfollow', populatedNotify);  // Emit new follow event to the followed user
-      }
-
-  } catch (error) {
-      console.error(error.message); // Log the error for debugging
+    console.error(error);
+    throw new Error("An error occurred while creating the post.");
   }
 };
 
 
-export const unfollowUser = async ({ userId, targetUserId }, io) => {
+
+export const likepost = async(socket,data,io) =>{
   try {
-      const user = await User.findById(userId);
-      const targetUser = await User.findById(targetUserId);
+    const post = await Post.findById(data.postId);
+    if (!post) return;
+    const user = await User.findById(data.userId);
+    if (!user) return;
+    const index = post.likes.indexOf(user._id);
+    if (index === -1) {
+      post.likes.push(user._id);
+      await post.save();
+      console.log(post);
+      socket.emit('likepost', post);
+      } else {
+        post.likes.splice(index, 1);
+        await post.save();
+        socket.emit('unlikepost', post);
+        }
+        } catch (error) {
+          console.error(error);  
+  }
+}
 
-      if (!user || !targetUser) {
-          return; // Optionally handle the error response
-      }
-
-      // Remove targetUser from user's following
-      user.following = user.following.filter(id => !id.equals(targetUserId));
-      await user.save();
-      io.to(userId).emit('unFollow', user);  // Emit unfollow event
-
-      // Remove user from targetUser's followers
-      targetUser.followers = targetUser.followers.filter(id => !id.equals(userId));
-      await targetUser.save();
-
-
-      // Add notification for the target user
-      await targetUser.save(); // Save the target user with the new notification
-
-      io.to(targetUserId).emit('unfollow', targetUser);  // Emit new unfollow event to the unfollowed user
-
-  } catch (error) {
-      console.error(error.message); // Log the error for debugging
+export const getfeeds = async (socket, io) => {
+  try {
+      const feeds = await Post.find()
+          .populate('user'); // Populate userId from createdBy
+      socket.emit('feeds', feeds); // Emit the populated feeds
+  } catch (err) {
+      console.error('Error fetching feeds:', err);
+      socket.emit('error', { message: 'Failed to fetch feeds' });
   }
 };
 
+
+export const getUserPost = async(socket,data,io) =>{
+  
+  const {userId} = data;
+  try {
+    const userPosts = await Post.find({user: userId}).populate('user');
+    socket.emit('getposts', userPosts);
+    } catch (err) {
+      console.error('Error fetching user posts:', err);
+      socket.emit('error', { message: 'Failed to fetch user posts' });
+      }
+}
