@@ -1,7 +1,7 @@
 // socket.js
 import { Server } from "socket.io";
 import User from './Schema/userSchema.js'; // Adjust the import according to your structure
-import {  createConversation, createPost,getAllCon, getfeeds, getUserPost, likepost } from "./controller/socketController.js";
+import {  createConversation, createPost,deletePost,getAllCon, getfeeds, getUserPost, likepost } from "./controller/socketController.js";
 
 export const initializeSocket = (server) => {
   const io = new Server(server, {
@@ -27,7 +27,6 @@ export const initializeSocket = (server) => {
       const { userId, description, image } = data;
       try {
         await createPost(socket,userId, { description, image }, io);
-        socket.emit('postCreated', { message: 'Post created successfully' });
       } catch (error) {
         socket.emit('postError', { message: error.message });
       }
@@ -40,8 +39,13 @@ export const initializeSocket = (server) => {
 
   
     socket.on('searchUser',async({prompt}) =>{
-      const users = await User.find({ username: new RegExp(prompt, 'i') });
+      try {
+        const users = await User.find({ username: new RegExp(prompt, 'i') });
       io.emit('searched', users);
+      } catch (error) {
+        console.log(error.message);
+        
+      }
     })
 
     socket.on('createcon', (data) => createConversation(socket, io, data));
@@ -62,8 +66,11 @@ export const initializeSocket = (server) => {
       socket.to(data.room).emit('stop typing', data);
   });
 
+  socket.on('deletepost',(data) => deletePost(socket,data))
+
     socket.on("disconnect", () => {
       console.log(`User with socket ID: ${socket.id} has disconnected`);
     });
+
   });
 };

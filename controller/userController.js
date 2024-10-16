@@ -37,7 +37,7 @@ if(req.file){
         password: hashedPassword,
         username: uu,
         phone,
-        image
+        image:`uploads/${image}`
     });
 
     try {
@@ -63,12 +63,7 @@ export const loginUser = async (req, res) => {
 
     try {
         const user = await User.findOne(query)
-            .populate('posts.likes.user', 'username image')
-            .populate('posts.comments.user', 'username image')
-            .populate('following', 'username image')
-            .populate('followers', 'username image')
-            .populate('posts')
-            .populate('feeds', "description likes")
+            .populate('notifications.user', 'username image')
 
         if (!user) {
             return res.json({ alert: "User not found" });
@@ -84,7 +79,7 @@ export const loginUser = async (req, res) => {
 
     } catch (error) {
         console.error(error);
-        res.json({ alert: "An error occurred" });
+        res.json({ alert: error.message });
     }
 };
 
@@ -92,11 +87,13 @@ export const loginUser = async (req, res) => {
 
 
 export const updateProfile = async (req, res) => {
-    const {name} = req.body
+    const {name,imge} = req.body
     let image = ''
 
     if(req.file){
         image = req.file.filename
+    }else if(req.body.image){
+        image = req.body.image
     }
 
     // Build the update object based on provided fields
@@ -108,11 +105,8 @@ export const updateProfile = async (req, res) => {
         const userId = req.body._id; // Adjust this according to your auth setup
 
         // Update the user in the database
-        const updatedUser = await User.findByIdAndUpdate(userId,{image:image,name:name}, { new: true, runValidators: true }) .populate('posts.likes.user', 'username image')
-        .populate('posts.comments.user', 'username image')
-        .populate('following', 'username image')
-        .populate('followers', 'username image')
-        .populate('posts');
+        const updatedUser = await User.findByIdAndUpdate(userId,{image:`uploads/${image}`,name:name}, { new: true, runValidators: true }) 
+        .populate('notifications.user', 'username image')
 
         if (!updatedUser) {
             return res.json({ alert: "User not found" });

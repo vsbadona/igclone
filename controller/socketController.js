@@ -83,7 +83,7 @@ export const getAllCon = async (socket, { userId }) => {
 
 
 
-export const createPost = async (socket,userId, { description, image }, io) => {
+export const createPost = async (socket, userId, { description, image }) => {
   try {
     const buffer = Buffer.from(new Uint8Array(image));
 
@@ -102,20 +102,24 @@ export const createPost = async (socket,userId, { description, image }, io) => {
       description: description || "",
       likes: [],
       comments: [],
-      createdAt:Date.now(),
+      createdAt: Date.now(),
       user: user._id,
     });
 
     await newPost.save();
-    socket.emit('profilePost',newPost);
-  
-  
-   
+    
+    // Populate the user field after saving the post
+    const populatedPost = await Post.findById(newPost._id).populate('user', 'username image');
+
+    // Emit the populated post through the socket
+    socket.emit('postcreated', populatedPost);
+
   } catch (error) {
     console.error(error);
     throw new Error("An error occurred while creating the post.");
   }
 };
+
 
 
 
@@ -164,3 +168,21 @@ export const getUserPost = async(socket,data,io) =>{
       socket.emit('error', { message: 'Failed to fetch user posts' });
       }
 }
+
+
+export const deletePost = async (socket, data) => {
+  const { postId } = data;
+  try {
+    // Using findByIdAndDelete to directly delete the post
+    const deletedPost = await Post.findByIdAndDelete(postId);
+    if (!deletedPost) {
+      console.error('Post not found');
+      return;
+    }
+
+    // Emit event after successful deletion
+    socket.emit('deletedpost',   postId );
+  } catch (err) {
+    console.error('Error deleting post:', err);
+  }
+};
