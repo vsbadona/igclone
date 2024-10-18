@@ -83,22 +83,19 @@ export const getAllCon = async (socket, { userId }) => {
 
 
 
-export const createPost = async (socket, userId, { description, image }) => {
+export const createPost = async (socket,io, userId, { description, image }) => {
   try {
     const buffer = Buffer.from(new Uint8Array(image));
+    const fileName = `${new mongoose.Types.ObjectId()}.jpg`;
+    const filePath = path.join(uploadsDir, fileName);
 
-    const fileName = `${new mongoose.Types.ObjectId()}.jpg`; // Change extension as needed
-    const filePath = path.join(uploadsDir, fileName); // Specify your uploads directory
-
-    // Save the image to the filesystem
-    fs.writeFileSync(filePath, buffer); // Handle errors in a production app
+    fs.writeFileSync(filePath, buffer);
     const user = await User.findById(userId);
     if (!user) return;
 
-    // Create a new post object with an ID
     const newPost = new Post({
-      _id: new mongoose.Types.ObjectId(), // Create a new unique ID
-      image: `/uploads/${fileName}`, // Save the relative path to the image
+      _id: new mongoose.Types.ObjectId(),
+      image: `/uploads/${fileName}`,
       description: description || "",
       likes: [],
       comments: [],
@@ -107,12 +104,10 @@ export const createPost = async (socket, userId, { description, image }) => {
     });
 
     await newPost.save();
-    
-    // Populate the user field after saving the post
     const populatedPost = await Post.findById(newPost._id).populate('user', 'username image');
 
-    // Emit the populated post through the socket
-    socket.emit('postcreated', populatedPost);
+    // Emit the new post to all connected clients
+    io.emit('postcreated', populatedPost);
 
   } catch (error) {
     console.error(error);

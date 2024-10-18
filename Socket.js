@@ -26,11 +26,12 @@ export const initializeSocket = (server) => {
     socket.on('uploadPost', async (data) => {
       const { userId, description, image } = data;
       try {
-        await createPost(socket,userId, { description, image }, io);
+        await createPost(socket,io, userId, { description, image }, io);
       } catch (error) {
         socket.emit('postError', { message: error.message });
       }
     });
+    
 
     socket.on('getfeeds',async()=>getfeeds(socket,io))
     socket.on('getposts',async(data) => getUserPost(socket,data,io));
