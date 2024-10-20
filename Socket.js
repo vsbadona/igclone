@@ -1,7 +1,7 @@
 // socket.js
 import { Server } from "socket.io";
 import User from './Schema/userSchema.js'; // Adjust the import according to your structure
-import {  createConversation, createPost,deletePost,getAllCon, getfeeds, getUserPost, likepost } from "./controller/socketController.js";
+import {  commentpost, createConversation, createPost,deletecomment,deletePost,getAllCon, getfeeds, getUserPost, likepost, viewProfile } from "./controller/socketController.js";
 
 export const initializeSocket = (server) => {
   const io = new Server(server, {
@@ -37,7 +37,9 @@ export const initializeSocket = (server) => {
     socket.on('getposts',async(data) => getUserPost(socket,data,io));
 
     socket.on('likepost',async(data)=>likepost(socket,data,io))
-
+    socket.on('commentpost',async(data)=>commentpost(socket,data,io))
+    socket.on('deletecomment',async(data)=>deletecomment(socket,data,io))
+    socket.on('userprofile',async(data)=>viewProfile(socket,data,io))
   
     socket.on('searchUser',async({prompt}) =>{
       try {
@@ -67,7 +69,7 @@ export const initializeSocket = (server) => {
       socket.to(data.room).emit('stop typing', data);
   });
 
-  socket.on('deletepost',(data) => deletePost(socket,data))
+  socket.on('deletepost',(data) => deletePost(socket,io,data))
 
     socket.on("disconnect", () => {
       console.log(`User with socket ID: ${socket.id} has disconnected`);

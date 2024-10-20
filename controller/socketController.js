@@ -104,7 +104,7 @@ export const createPost = async (socket,io, userId, { description, image }) => {
     });
 
     await newPost.save();
-    const populatedPost = await Post.findById(newPost._id).populate('user', 'username image');
+    const populatedPost = await Post.findById(newPost._id).populate('user', 'username name image').populate('likes.user', 'username name image').populate('comments.user', 'username name image');
 
     // Emit the new post to all connected clients
     io.emit('postcreated', populatedPost);
@@ -115,35 +115,41 @@ export const createPost = async (socket,io, userId, { description, image }) => {
   }
 };
 
-
-
-
-export const likepost = async(socket,data,io) =>{
+export const likepost = async (socket, data, io) => {
   try {
     const post = await Post.findById(data.postId);
     if (!post) return;
     const user = await User.findById(data.userId);
     if (!user) return;
-    const index = post.likes.indexOf(user._id);
+
+    const index = post.likes.findIndex(like => like?.user?.equals(user._id));
+    
     if (index === -1) {
-      post.likes.push(user._id);
+      // User is liking the post
+      post.likes.push({ user: user._id }); // Store as an object
       await post.save();
-      console.log(post);
-      socket.emit('likepost', post);
-      } else {
-        post.likes.splice(index, 1);
-        await post.save();
-        socket.emit('unlikepost', post);
-        }
-        } catch (error) {
-          console.error(error);  
+      
+      // Populate after saving
+      const newPost = await Post.findById(post._id).populate('user', 'username name image').populate('likes.user', 'username name image').populate('comments.user', 'username name image');
+      io.emit('likepost', newPost);
+    } else {
+      // User is unliking the post
+      post.likes.splice(index, 1);
+      await post.save();
+      
+      const newPost = await Post.findById(post._id).populate('user', 'username name image').populate('likes.user', 'username name image').populate('comments.user', 'username name image');
+      io.emit('unlikepost', newPost);
+    }
+  } catch (error) {
+    console.error(error);
   }
-}
+};
+
+
 
 export const getfeeds = async (socket, io) => {
   try {
-      const feeds = await Post.find()
-          .populate('user'); // Populate userId from createdBy
+      const feeds = await Post.find().populate('user', 'username name image').populate('likes.user', 'username name image').populate('comments.user', 'username name image'); // Populate userId from createdBy
       socket.emit('feeds', feeds); // Emit the populated feeds
   } catch (err) {
       console.error('Error fetching feeds:', err);
@@ -156,7 +162,7 @@ export const getUserPost = async(socket,data,io) =>{
   
   const {userId} = data;
   try {
-    const userPosts = await Post.find({user: userId}).populate('user');
+    const userPosts = await Post.find({user: userId}).populate('user', 'username name image').populate('likes.user', 'username name image').populate('comments.user', 'username name image');
     socket.emit('getposts', userPosts);
     } catch (err) {
       console.error('Error fetching user posts:', err);
@@ -165,19 +171,80 @@ export const getUserPost = async(socket,data,io) =>{
 }
 
 
-export const deletePost = async (socket, data) => {
+export const deletePost = async (socket, io, data) => {
   const { postId } = data;
   try {
-    // Using findByIdAndDelete to directly delete the post
-    const deletedPost = await Post.findByIdAndDelete(postId);
-    if (!deletedPost) {
-      console.error('Post not found');
-      return;
-    }
+      const deletedPost = await Post.findByIdAndDelete(postId);
+      if (!deletedPost) {
+          console.error('Post not found');
+          return;
+      }
 
-    // Emit event after successful deletion
-    socket.emit('deletedpost',   postId );
+      console.log(`Post ${postId} deleted. Emitting 'deletedpost' event.`);
+      io.emit('deletedpost', postId); // This should be seen in the server logs
   } catch (err) {
-    console.error('Error deleting post:', err);
+      console.error('Error deleting post:', err);
   }
 };
+
+
+export const commentpost = async (socket, data, io) => {
+  try {
+    const post = await Post.findById(data.postId);
+    if (!post) return;
+    const user = await User.findById(data.userId);
+    if (!user) return;
+    
+      // User is liking the post
+      post.comments.push({ user: user._id,text:data?.text }); // Store as an object
+      await post.save();
+      
+      // Populate after saving
+      const newPost = await Post.findById(post._id).populate('user', 'username name image').populate('likes.user', 'username name image').populate('comments.user', 'username name image');
+      io.emit('commentpost', newPost);
+   
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+
+export const deletecomment = async (socket, data, io) => {
+  try {
+    const post = await Post.findById(data.postId);
+    if (!post) return;
+
+    const user = await User.findById(data.userId);
+    if (!user) return;
+
+    // Find the index of the comment to delete
+    const index = post.comments.findIndex(comment => comment._id.equals(data.comment));
+
+    if (index !== -1) {
+      // Remove the comment
+      post.comments.splice(index, 1);
+      await post.save();
+
+      // Populate the post to emit the updated state
+      const newPost = await Post.findById(post._id)
+        .populate('user', 'username name image')
+        .populate('likes.user', 'username name image')
+        .populate('comments.user', 'username name image');
+
+      // Emit the updated post after comment deletion
+      io.emit('deletecomment', newPost);
+    }
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+
+export const viewProfile = async(socket, data, io) =>{
+  try{
+    const user = await User.findById(data.userId);
+    io.emit('viewprofile', user);
+    }catch(error){
+      console.error(error);
+      }
+}
