@@ -249,7 +249,7 @@ export const commentpost = async (socket, data, io) => {
       }
 
       io.to(newPost?.user?._id.toString()).emit('notify', {
-          message: `has commented on your post ${data?.text}`,
+          content: `has commented on your post ${data?.text}`,
           user: user,
           post: newPost
       });
