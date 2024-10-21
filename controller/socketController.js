@@ -6,6 +6,7 @@ import User from '../Schema/userSchema.js'; // Adjust the import according to yo
 import { fileURLToPath } from 'url';
 import Conversation from '../Schema/conversationSchema.js';
 import Post from '../Schema/postSchema.js';
+import Message from '../Schema/MessageSchema.js';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -18,68 +19,75 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir);
 }
 
+export const createConversation = async (socket, io, user1Id, user2Id) => {
 
+    try {
+        let conversation = await Conversation.findOne({
+            participants: { $all: [user1Id, user2Id] }
+        })// Populate participants
 
+        if (!conversation) {
+            conversation = new Conversation({
+                participants: [user1Id, user2Id]
+            });
+            await conversation.save();
 
+            // Populate the newly created conversation's participants
+            conversation = await Conversation.findById(conversation._id).populate('participants');
+            io.emit('newConversation', conversation); // Emit to all clients
+        }
 
-export const createConversation = async (socket, io, { username, userId }) => {
-  try {
-      const user = await User.findOne({ username });
-      if (!user || user._id.toString() === userId) {
-          return socket.emit('alert', { message: "You can't create a conversation with yourself" });
-      }
-
-      const ifConExist = await Conversation.findOne({ participants: { $all: [user._id, userId] } });
-      if (ifConExist) {
-          return socket.emit('alert', { message: "Conversation exists" });
-      }
-
-      const conversation = new Conversation({ participants: [user._id, userId],creator:[user._id] });
-      await conversation.save();
-
-      const userInitiator = await User.findById(user._id);
-      const userRecipient = await User.findById(userId);
-
-      userInitiator.conversations.push(conversation._id);
-      userRecipient.conversations.push(conversation._id);
-      await userInitiator.save();
-      await userRecipient.save();
-
-      const populatedConversation = await conversation
-      .populate('creator', 'username image') // Populate creator with username and image
-      .populate('participants', 'username image'); // Populate participants with username and image
-    
-      // Emit the new conversation to both users by their userId
-      socket.emit('success', { message: "Success" });
-      io.to(user._id.toString()).emit('newConversation', { conversation: populatedConversation });
-      { userId, targetUserId }
-  } catch (error) {
-      socket.emit('error', { message: error.message });
-  }
+        socket.join(conversation._id); // Join the conversation room
+        socket.emit('conversationCreated', conversation); // Emit to the creating user
+    } catch (error) {
+        console.error('Error creating conversation:', error);
+    }
 };
+
+
+
+
+export const joinConversation = (socket, conversationId) => {
+  socket.join(conversationId);
+  console.log(`User joined conversation: ${conversationId}`);
+};
+
+export const sendMessage = async ({ conversationId, userId, text }) => {
+  const message = new Message({ conversationId, sender: userId, text });
+  await message.save();
+
+  // Update last message in conversation
+  const conversation = await Conversation.findById(conversationId);
+  conversation.lastMessage = message._id;
+  await conversation.save();
+
+  return message; // Return the saved message
+};
+
 
 // Get all conversations for a user
 export const getAllCon = async (socket, { userId }) => {
   try {
-      const user = await User.findById(userId).populate({
-          path: 'conversations',
-          populate:{path: 'creator', select: 'username image' },
-          populate: { path: 'participants', select: 'username image' },
-      });
+    const user = await User.findById(userId).populate({
+      path: 'conversations',
+      populate: { path: 'participants', select: 'username image' },
+    });
 
-      const conversations = user.conversations.map(conversation => {
-          const filteredParticipants = conversation.participants.filter(participant => participant._id.toString() !== userId);
-          return {
-              ...conversation.toObject(),
-              participants: filteredParticipants
-          };
-      });
+    const conversations = user.conversations.map(conversation => {
+      const filteredParticipants = conversation.participants.filter(participant => participant._id.toString() !== userId);
+      return {
+        ...conversation.toObject(),
+        participants: filteredParticipants
+      };
+    });
 
-      socket.emit('getAllCon', { conversations });
+    // Instead of emitting to socket, send the response
+    socket.emit('getAllCon', { conversations }); // If you're using socket in some other way
   } catch (error) {
-      socket.emit('alert', { message: error.message });
+    socket.emit('alert', { message: error.message });
   }
 };
+
 
 
 
@@ -115,34 +123,59 @@ export const createPost = async (socket,io, userId, { description, image }) => {
   }
 };
 
-export const likepost = async (socket, data, io) => {
-  try {
-    const post = await Post.findById(data.postId);
-    if (!post) return;
-    const user = await User.findById(data.userId);
-    if (!user) return;
 
-    const index = post.likes.findIndex(like => like?.user?.equals(user._id));
-    
-    if (index === -1) {
-      // User is liking the post
-      post.likes.push({ user: user._id }); // Store as an object
-      await post.save();
-      
-      // Populate after saving
-      const newPost = await Post.findById(post._id).populate('user', 'username name image').populate('likes.user', 'username name image').populate('comments.user', 'username name image');
-      io.emit('likepost', newPost);
-    } else {
-      // User is unliking the post
-      post.likes.splice(index, 1);
-      await post.save();
-      
-      const newPost = await Post.findById(post._id).populate('user', 'username name image').populate('likes.user', 'username name image').populate('comments.user', 'username name image');
-      io.emit('unlikepost', newPost);
+export const likepost = async (socket, data, io) => {
+    try {
+        const post = await Post.findById(data.postId);
+        if (!post) return;
+        const user = await User.findById(data.userId);
+        if (!user) return;
+
+        const index = post.likes.findIndex(like => like?.user?.equals(user._id));
+
+        if (index === -1) {
+            // User is liking the post
+            post.likes.push({ user: user._id }); // Store as an object
+            await post.save();
+
+            // Populate after saving
+            const newPost = await Post.findById(post._id)
+                .populate('user', 'username name image')
+                .populate('likes.user', 'username name image')
+                .populate('comments.user', 'username name image');
+
+            // Send notification to the post owner
+            const postOwner = await User.findById(newPost.user._id);
+            if (postOwner) {
+                postOwner.notifications.push({
+                    user: user._id,
+                    content: ` has liked your post`,
+                    time: Date.now(),
+                    post:post._id
+                });
+                await postOwner.save(); // Save the notification to the user
+            }
+
+            io.to(newPost?.user?._id.toString()).emit('notify', {
+                message: `has liked your post`,
+                user: user,
+                post: newPost
+            });
+            io.emit('likepost', newPost);
+        } else {
+            // User is unliking the post
+            post.likes.splice(index, 1);
+            await post.save();
+
+            const newPost = await Post.findById(post._id)
+                .populate('user', 'username name image')
+                .populate('likes.user', 'username name image')
+                .populate('comments.user', 'username name image');
+            io.emit('unlikepost', newPost);
+        }
+    } catch (error) {
+        console.error(error);
     }
-  } catch (error) {
-    console.error(error);
-  }
 };
 
 
@@ -201,6 +234,23 @@ export const commentpost = async (socket, data, io) => {
       
       // Populate after saving
       const newPost = await Post.findById(post._id).populate('user', 'username name image').populate('likes.user', 'username name image').populate('comments.user', 'username name image');
+
+      const postOwner = await User.findById(newPost.user._id);
+      if (postOwner) {
+          postOwner.notifications.push({
+              user: user._id,
+              content: ` has commented on your post ${data?.text}`,
+              time: Date.now(),
+              post:post._id
+          });
+          await postOwner.save(); // Save the notification to the user
+      }
+
+      io.to(newPost?.user?._id.toString()).emit('notify', {
+          message: `has commented on your post ${data?.text}`,
+          user: user,
+          post: newPost
+      });
       io.emit('commentpost', newPost);
    
   } catch (error) {
@@ -248,3 +298,4 @@ export const viewProfile = async(socket, data, io) =>{
       console.error(error);
       }
 }
+

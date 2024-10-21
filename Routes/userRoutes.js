@@ -1,7 +1,7 @@
 import express from "express"
 import multer from "multer"
 import path from "path"
-import { addComment, addLike, createPost, followUser, getFeeds, getNotify, loginUser, register, unfollowUser, updateProfile, viewPosts, viewProfile } from "../controller/userController.js";
+import { addComment, addLike, createPost, followUser, getConversations, getFeeds, getMessagesByConversationId, getNotify, loginUser, register, unfollowUser, updateProfile, viewPosts, viewProfile } from "../controller/userController.js";
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -28,5 +28,7 @@ Routes.get('/getfeeds/:id',getFeeds)
 Routes.post('/follow/:userId/:targetUserId',followUser)
 Routes.post('/unfollow/:userId/:targetUserId',unfollowUser)
 Routes.get('/viewnotify/:id',getNotify)
+Routes.get('/getconv/:id',getConversations)
+Routes.get('/messages/:conversationId', getMessagesByConversationId);
 
 export default Routes

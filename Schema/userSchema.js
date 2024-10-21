@@ -17,9 +17,10 @@ const userSchema = new mongoose.Schema({
         user:{
             type:mongoose.Schema.Types.ObjectId, ref: 'User' 
         },
-        action:String,
+        post:{
+            type:mongoose.Schema.Types.ObjectId, ref: 'Post'
+        },
         content:String,
-        button:String
     }],
     conversations: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Conversation' ,user:{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }}]
 

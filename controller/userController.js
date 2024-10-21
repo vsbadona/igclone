@@ -2,6 +2,8 @@ import bcrypt from "bcryptjs"
 import User from "../Schema/userSchema.js";
 import jwt from "jsonwebtoken"
 import mongoose from "mongoose";
+import Conversation from "../Schema/conversationSchema.js";
+import Message from "../Schema/MessageSchema.js";
 export const register = async (req, res) => {
 
     let image = ''
@@ -399,6 +401,8 @@ export const getNotify = async (req, res) => {
             .populate({
                 path: 'notifications.user',
                 select: 'username image' // Specify fields to include
+            }).populate({
+                path: 'notifications.post'
             });
 
         if (!user) {
@@ -412,3 +416,34 @@ export const getNotify = async (req, res) => {
         res.json({ alert: "An error occurred while fetching notifications." });
     }
 };
+
+
+
+export const getConversations = async (req, res) => {
+    const {id} = req.params; // Assume you have middleware to set req.user
+    try {
+        const conversations = await Conversation.find({
+            participants: id
+        }).populate('participants', 'username name image'); // Populate with user info
+
+        res.json({ success: true, conversations });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
+
+// Assuming you have a Message model
+export const getMessagesByConversationId = async (req, res) => {
+    const { conversationId } = req.params;
+    try {
+      const messages = await Message.find({ conversationId })
+        .populate('sender', 'username image') // Populate sender info if needed
+        .sort({ createdAt: 1 }); // Sort messages by creation date
+      res.status(200).json(messages);
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  };
+  

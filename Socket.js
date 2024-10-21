@@ -1,7 +1,7 @@
 // socket.js
 import { Server } from "socket.io";
 import User from './Schema/userSchema.js'; // Adjust the import according to your structure
-import {  commentpost, createConversation, createPost,deletecomment,deletePost,getAllCon, getfeeds, getUserPost, likepost, viewProfile } from "./controller/socketController.js";
+import {  commentpost, createConversation, createPost,deletecomment,deletePost,getAllCon, getfeeds, getUserPost, joinConversation, likepost, sendMessage, viewProfile } from "./controller/socketController.js";
 
 export const initializeSocket = (server) => {
   const io = new Server(server, {
@@ -51,24 +51,32 @@ export const initializeSocket = (server) => {
       }
     })
 
-    socket.on('createcon', (data) => createConversation(socket, io, data));
+    socket.on('createConversation', ({ user1Id, user2Id }) =>  createConversation(socket, io, user1Id,user2Id));
 
     // Event for getting all conversations
-    socket.on('getAllCon', (data) => getAllCon(socket, data));
-
-    
-    socket.on('chat message', (msg) => {
-      io.to(msg.room).emit('chat message', msg); // Send message to the specific room
-  });
-
-  socket.on('typing', (data) => {
-      socket.to(data.room).emit('typing', data);
-  });
-
-  socket.on('stop typing', (data) => {
-      socket.to(data.room).emit('stop typing', data);
-  });
-
+    socket.on('join', ({ conversationId }) => {
+      socket.join(conversationId);
+      console.log(`User joined room: ${conversationId}`);
+    });
+  
+    socket.on('chat message', async (msg) => {
+      try {
+        const message = await sendMessage(msg);
+        // Emit the saved message to the room
+        socket.to(msg.conversationId).emit('chat message', message);
+      } catch (error) {
+        console.error('Error saving message:', error);
+      }
+    });
+  
+    socket.on('typing', (data) => {
+      socket.to(data.conversationId).emit('typing', { username: data.username });
+    });
+  
+    socket.on('stop typing', (data) => {
+      socket.to(data.conversationId).emit('stop typing');
+    });
+  
   socket.on('deletepost',(data) => deletePost(socket,io,data))
 
     socket.on("disconnect", () => {
