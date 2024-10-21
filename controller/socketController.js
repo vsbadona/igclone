@@ -157,9 +157,11 @@ export const likepost = async (socket, data, io) => {
             }
 
             io.to(newPost?.user?._id.toString()).emit('notify', {
-                message: `has liked your post`,
+                content: `has liked your post`,
                 user: user,
-                post: newPost
+                post: newPost,
+                time: Date.now(),
+
             });
             io.emit('likepost', newPost);
         } else {
