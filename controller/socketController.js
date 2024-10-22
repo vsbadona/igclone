@@ -21,15 +21,25 @@ if (!fs.existsSync(uploadsDir)) {
 
 export const createConversation = async (socket, io, user1Id, user2Id) => {
   try {
+      // Validate user IDs
+      if (!mongoose.Types.ObjectId.isValid(user1Id) || !mongoose.Types.ObjectId.isValid(user2Id)) {
+          throw new Error('Invalid user IDs');
+      }
+
+      console.log('Attempting to create conversation between:', user1Id, user2Id);
+
+      // Check if the conversation already exists
       let conversation = await Conversation.findOne({
           participants: { $all: [user1Id, user2Id] }
-      });
+      }).populate('participants');
 
       if (!conversation) {
+          // Create a new conversation
           conversation = new Conversation({
               participants: [user1Id, user2Id]
           });
-          await conversation.save();
+
+          await conversation.save(); // Save the new conversation
 
           // Populate the newly created conversation's participants
           conversation = await Conversation.findById(conversation._id).populate('participants');
@@ -38,17 +48,20 @@ export const createConversation = async (socket, io, user1Id, user2Id) => {
           await User.findByIdAndUpdate(user1Id, { $addToSet: { conversations: conversation._id } });
           await User.findByIdAndUpdate(user2Id, { $addToSet: { conversations: conversation._id } });
 
-          io.emit('newConversation', conversation); // Emit to all clients
+          // Emit the populated conversation details to all clients
+          io.emit('conversationCreated', conversation); // Emit populated conversation
+      }else{
+
+        socket.join(conversation._id); 
+        // Emit the populated conversation details to the creating user
+        socket.emit('conversationExists', conversation); // Emit populated conversation
       }
 
-      socket.join(conversation._id); // Join the conversation room
-      socket.emit('conversationCreated', conversation); // Emit to the creating user
+      // Join the conversation room
   } catch (error) {
-      console.error('Error creating conversation:', error);
+      console.error('Error creating conversation:', { user1Id, user2Id, error });
   }
 };
-
-
 
 
 
