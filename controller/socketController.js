@@ -176,6 +176,8 @@ export const likepost = async (socket, data, io) => {
                 await postOwner.save(); // Save the notification to the user
             }
 
+            
+            
             io.to(newPost?.user?._id.toString()).emit('notify', {
                 content: `has liked your post`,
                 user: user,
