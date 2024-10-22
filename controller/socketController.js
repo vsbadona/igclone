@@ -20,29 +20,34 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 export const createConversation = async (socket, io, user1Id, user2Id) => {
+  try {
+      let conversation = await Conversation.findOne({
+          participants: { $all: [user1Id, user2Id] }
+      });
 
-    try {
-        let conversation = await Conversation.findOne({
-            participants: { $all: [user1Id, user2Id] }
-        })// Populate participants
+      if (!conversation) {
+          conversation = new Conversation({
+              participants: [user1Id, user2Id]
+          });
+          await conversation.save();
 
-        if (!conversation) {
-            conversation = new Conversation({
-                participants: [user1Id, user2Id]
-            });
-            await conversation.save();
+          // Populate the newly created conversation's participants
+          conversation = await Conversation.findById(conversation._id).populate('participants');
 
-            // Populate the newly created conversation's participants
-            conversation = await Conversation.findById(conversation._id).populate('participants');
-            io.emit('newConversation', conversation); // Emit to all clients
-        }
+          // Save conversation ID in both users' schemas
+          await User.findByIdAndUpdate(user1Id, { $addToSet: { conversations: conversation._id } });
+          await User.findByIdAndUpdate(user2Id, { $addToSet: { conversations: conversation._id } });
 
-        socket.join(conversation._id); // Join the conversation room
-        socket.emit('conversationCreated', conversation); // Emit to the creating user
-    } catch (error) {
-        console.error('Error creating conversation:', error);
-    }
+          io.emit('newConversation', conversation); // Emit to all clients
+      }
+
+      socket.join(conversation._id); // Join the conversation room
+      socket.emit('conversationCreated', conversation); // Emit to the creating user
+  } catch (error) {
+      console.error('Error creating conversation:', error);
+  }
 };
+
 
 
 
@@ -66,23 +71,25 @@ export const sendMessage = async ({ conversationId, userId, text }) => {
 
 
 // Get all conversations for a user
-export const getAllCon = async (socket, { userId }) => {
+export const getAllCon = async (socket, userId ) => {
   try {
     const user = await User.findById(userId).populate({
       path: 'conversations',
-      populate: { path: 'participants', select: 'username image' },
+      populate: [
+        { path: 'participants', select: 'username image' },
+        { path: 'lastMessage' } // Populate lastMessage to access its content
+      ],
     });
 
     const conversations = user.conversations.map(conversation => {
       const filteredParticipants = conversation.participants.filter(participant => participant._id.toString() !== userId);
       return {
         ...conversation.toObject(),
-        participants: filteredParticipants
+        participants: filteredParticipants,
       };
     });
 
-    // Instead of emitting to socket, send the response
-    socket.emit('getAllCon', { conversations }); // If you're using socket in some other way
+    socket.emit('getallconv', { conversations });
   } catch (error) {
     socket.emit('alert', { message: error.message });
   }

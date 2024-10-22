@@ -58,6 +58,13 @@ export const initializeSocket = (server) => {
       socket.join(conversationId);
       console.log(`User joined room: ${conversationId}`);
     });
+    socket.on('getallconv', ({ userId}) =>  getAllCon(socket,userId));
+
+    // Event for getting all conversations
+    socket.on('join', ({ conversationId }) => {
+      socket.join(conversationId);
+      console.log(`User joined room: ${conversationId}`);
+    });
   
     socket.on('chat message', async (msg) => {
       try {
