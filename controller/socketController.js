@@ -263,7 +263,7 @@ export const commentpost = async (socket, data, io) => {
       if (postOwner) {
           postOwner.notifications.push({
               user: user._id,
-              content: ` has commented on your post ${data?.text}`,
+              content: ` has commented on your post : ${data?.text}`,
               time: Date.now(),
               post:post._id
           });
@@ -271,7 +271,7 @@ export const commentpost = async (socket, data, io) => {
       }
 
       io.to(newPost?.user?._id.toString()).emit('notify', {
-          content: `has commented on your post ${data?.text}`,
+          content: `has commented on your post : ${data?.text}`,
           user: user,
           post: newPost
       });
